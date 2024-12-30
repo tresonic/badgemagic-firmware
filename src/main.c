@@ -17,6 +17,9 @@
 
 #include "usb/usb.h"
 
+#include "ba_badge.h"
+#include "heatshrink.h"
+
 #define SCAN_F          (2000)
 #define SCAN_T          (FREQ_SYS / SCAN_F)
 
@@ -48,6 +51,7 @@ enum MODES {
 #define ANI_FLASH           (1 << 2)
 #define SCAN_BOOTLD_BTN     (1 << 3)
 #define BLE_NEXT_STEP       (1 << 4)
+#define VIDEO_TASK          (1 << 5)
 
 #define CHARGE_STT_PIN      GPIO_Pin_0 // PA0
 
@@ -55,6 +59,9 @@ static tmosTaskID common_taskid = INVALID_TASK_ID ;
 
 volatile uint16_t fb[LED_COLS] = {0};
 volatile int mode, is_play_sequentially = 1, brightness = 0;
+
+static heatshrink_sfh_context hs_ctx;
+static uint8_t heatshrink_outbuf[LED_COLS * 2 * 2];
 
 __HIGH_CODE
 static void change_brightness()
@@ -216,6 +223,21 @@ static uint16_t common_tasks(tmosTaskID task_id, uint16_t events)
 		return events ^ BLE_NEXT_STEP;
 	}
 
+    if (events & VIDEO_TASK) {
+        static uint8_t decompbuf[LED_COLS * 2];
+        static heatshrink_sfh_context ctx;
+
+
+        static uint32_t frameid = 0;
+        int framecol = 0;
+        for (int i=0; i<LED_COLS*2; i++) {
+            fb[i] = ba_badge[frameid + (framecol++)] | ba_badge[frameid + (framecol++)]<<8;
+        }
+        frameid += 88;
+        if (frameid > (uint32_t)_sizeof_ba_badge) frameid = 0;
+        return events ^ VIDEO_TASK;
+    }
+
 	return 0;
 }
 
@@ -269,11 +291,12 @@ void spawn_tasks()
 {
 	common_taskid = TMOS_ProcessEventRegister(common_tasks);
 
-	tmos_start_reload_task(common_taskid, ANI_MARQUE, ANI_MARQUE_SPEED_T / 625);
-	tmos_start_reload_task(common_taskid, ANI_FLASH, ANI_FLASH_SPEED_T / 625);
-	tmos_start_reload_task(common_taskid, SCAN_BOOTLD_BTN,
+	tmos_start_reload_task(common_taskid, VIDEO_TASK, 30u);
+	// tmos_start_reload_task(common_taskid, ANI_MARQUE, ANI_MARQUE_SPEED_T / 625);
+	// tmos_start_reload_task(common_taskid, ANI_FLASH, ANI_FLASH_SPEED_T / 625);
+	tmos_start_reload_task(common_taskid, SCAN_BOOTLD_BTN, 
 				SCAN_BOOTLD_BTN_SPEED_T / 625);
-	tmos_start_task(common_taskid, ANI_NEXT_STEP, 500000 / 625);
+	// tmos_start_task(common_taskid, ANI_NEXT_STEP, 500000 / 625);
 }
 
 void ble_start()
@@ -428,13 +451,26 @@ static void disp_charging()
 				fb_putchar(' ', 40, 2);
 			}
 			blink = !blink;
-			DelayMs(500);
+			DelayMs(250);
 		} else {
 			disp_bat_stt(percent, 7, 2);
-			DelayMs(500);
+			DelayMs(250);
 			return;
 		}
 	}
+}
+
+void init_heatshrink() {
+	// int r = heatshrink_sf_init( &ctx, output_buffer, sizeof( output_buffer ), 8, 4 );
+
+	// ctx.input_buffer = ba_badge;
+	// ctx.input_size = sizeof( _sizeof_ba_badge );
+	// ctx.input_place = 0;
+
+	// ctx.out_buffer = heatshrink_outbuf;
+	// ctx.out_buffer_size = sizeof( output_buffer );
+	// ctx.out_buffer_place = 0;
+	// r = heatshrink_sf_proceed( &ctx );
 }
 
 int main()
@@ -461,8 +497,8 @@ int main()
 	btn_onLongPress(KEY1, change_brightness);
 
 	disp_charging();
-
-	play_splash(&splash, 0, 0);
+	
+	// play_splash(&splash, 0, 0);
 
 	load_bmlist();
 
