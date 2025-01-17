@@ -79,6 +79,8 @@ src/xbm.c \
 src/resource.c \
 src/animation.c \
 src/font.c \
+src/frame_decoder.c \
+src/heatshrink/heatshrink_decoder.c \
 
 
 # ASM sources

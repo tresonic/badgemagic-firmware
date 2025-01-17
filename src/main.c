@@ -17,8 +17,8 @@
 
 #include "usb/usb.h"
 
+#include "frame_decoder.h"
 #include "ba_badge.h"
-#include "heatshrink.h"
 
 #define SCAN_F          (2000)
 #define SCAN_T          (FREQ_SYS / SCAN_F)
@@ -57,11 +57,10 @@ enum MODES {
 
 static tmosTaskID common_taskid = INVALID_TASK_ID ;
 
+static frame_decoder fd;
+
 volatile uint16_t fb[LED_COLS] = {0};
 volatile int mode, is_play_sequentially = 1, brightness = 0;
-
-static heatshrink_sfh_context hs_ctx;
-static uint8_t heatshrink_outbuf[LED_COLS * 2 * 2];
 
 __HIGH_CODE
 static void change_brightness()
@@ -224,17 +223,17 @@ static uint16_t common_tasks(tmosTaskID task_id, uint16_t events)
 	}
 
     if (events & VIDEO_TASK) {
-        static uint8_t decompbuf[LED_COLS * 2];
-        static heatshrink_sfh_context ctx;
+        // static uint32_t frameid = 0;
+        // int framecol = 0;
+        // for (int i=0; i<LED_COLS; i++) {
+        //     fb[i] = ba_badge[frameid + (framecol++)] | ba_badge[frameid + (framecol++)]<<8;
+        // // }
+        // frameid += 88;
+        // if (frameid > (uint32_t)_sizeof_ba_badge) frameid = 0;
+        // if (frameid > sizeof (ba_badge)) frameid = 0;
 
+        get_frame(&fd, (uint8_t*)fb);
 
-        static uint32_t frameid = 0;
-        int framecol = 0;
-        for (int i=0; i<LED_COLS*2; i++) {
-            fb[i] = ba_badge[frameid + (framecol++)] | ba_badge[frameid + (framecol++)]<<8;
-        }
-        frameid += 88;
-        if (frameid > (uint32_t)_sizeof_ba_badge) frameid = 0;
         return events ^ VIDEO_TASK;
     }
 
@@ -306,6 +305,7 @@ void ble_start()
 	tmos_stop_task(common_taskid, ANI_NEXT_STEP);
 	tmos_stop_task(common_taskid, ANI_MARQUE);
 	tmos_stop_task(common_taskid, ANI_FLASH);
+	tmos_stop_task(common_taskid, VIDEO_TASK);
 	memset(fb, 0, sizeof(fb));
 
 	tmos_start_reload_task(common_taskid, BLE_NEXT_STEP, 500000 / 625);
@@ -460,19 +460,6 @@ static void disp_charging()
 	}
 }
 
-void init_heatshrink() {
-	// int r = heatshrink_sf_init( &ctx, output_buffer, sizeof( output_buffer ), 8, 4 );
-
-	// ctx.input_buffer = ba_badge;
-	// ctx.input_size = sizeof( _sizeof_ba_badge );
-	// ctx.input_place = 0;
-
-	// ctx.out_buffer = heatshrink_outbuf;
-	// ctx.out_buffer_size = sizeof( output_buffer );
-	// ctx.out_buffer_place = 0;
-	// r = heatshrink_sf_proceed( &ctx );
-}
-
 int main()
 {
 	SetSysClock(CLK_SOURCE_PLL_60MHz);
@@ -496,9 +483,10 @@ int main()
 	btn_onOnePress(KEY2, bm_transition);
 	btn_onLongPress(KEY1, change_brightness);
 
-	disp_charging();
-	
+	// disp_charging();
 	// play_splash(&splash, 0, 0);
+
+    init_frame_decoder(&fd, ba_badge, _sizeof_ba_badge, 88);
 
 	load_bmlist();
 

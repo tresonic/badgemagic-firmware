@@ -10,6 +10,6 @@
     )
     // ".section \".text\"\n")                 /* Restore section */
 
-IMPORT_BIN("FLASH", "src/ba_badge.bin", ba_badge);
+IMPORT_BIN("FLASH", "src/cmp_ba_badge.bin", ba_badge);
 /* Declaration of symbols (any type can be used) */
 extern const unsigned char ba_badge[], _sizeof_ba_badge[];
